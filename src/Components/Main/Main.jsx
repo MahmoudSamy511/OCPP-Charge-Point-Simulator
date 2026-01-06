@@ -92,7 +92,13 @@ const Main = () => {
     const getCommand = (commands.filter(x => x.id === id))[0]
 
     if (!getCommand) {
-      updateLog( { time: getTime(), type: logTypes.error, message: 'Cannot recognize command!' })
+      const commandName = message?.errorCode ? `Error: ${message.errorCode}` : 'Unknown'
+      updateLog({ 
+        time: getTime(), 
+        type: logTypes.error, 
+        command: commandName,
+        message: JSON.stringify(message) 
+      })
       return
     }
 
@@ -153,7 +159,7 @@ const Main = () => {
       centralSystemSend(statusData.ocppCommand, statusData.lastCommand)
     }
 
-    if (command === 'StopTransaction' && message.idTagInfo.status === 'Accepted') {
+    if (command === 'StopTransaction' && (!message.idTagInfo || message.idTagInfo.status === 'Accepted')) {
       connectors[connector].startMeterValue = connectors[connector].currentMeterValue
       connectors[connector].transactionId = 0
       connectors[connector].inTransaction = false
@@ -305,16 +311,49 @@ const Main = () => {
     }
 
     ws.onmessage = (msg) => {
-      const [ type, id, message, payload ] = JSON.parse(msg.data)
-      switch (type) {
-        case 2:
-          incomingRequest(id, message, payload)
-          break;
-        case 3:
-          incomingMessage(id, message)
-          break;
-        default:
-          break;
+      try {
+        const parsed = JSON.parse(msg.data)
+        const type = parsed[0]
+        const id = parsed[1]
+        
+        switch (type) {
+          case 2:
+            incomingRequest(id, parsed[2], parsed[3])
+            break;
+          case 3:
+            incomingMessage(id, parsed[2])
+            break;
+          case 4:
+            const getCommand = (commands.filter(x => x.id === id))[0]
+            const commandName = getCommand ? getCommand.command : 'Unknown'
+            const errorMessage = {
+              errorCode: parsed[2] || 'Unknown',
+              errorDescription: parsed[3] || 'No description',
+              errorDetails: parsed[4] || null
+            }
+            updateLog({ 
+              time: getTime(), 
+              type: logTypes.error, 
+              command: commandName,
+              message: JSON.stringify(errorMessage) 
+            })
+            break;
+          default:
+            updateLog({ 
+              time: getTime(), 
+              type: logTypes.error, 
+              command: 'Unknown',
+              message: `Unexpected message type: ${type}. Raw: ${msg.data}` 
+            })
+            break;
+        }
+      } catch (error) {
+        updateLog({ 
+          time: getTime(), 
+          type: logTypes.error, 
+          command: 'Parse Error',
+          message: `Failed to parse message: ${error.message}. Raw: ${msg.data}` 
+        })
       }
     }
   }
@@ -396,6 +435,5 @@ const Main = () => {
     </Container>
   )
 }
-
 
 export default Main
