@@ -33,7 +33,8 @@ const defaultSettings = {
     firmWareStatus: 'Downloaded',
     connectorOneUnlock: 'Unlocked',
     connectorTwoUnlock: 'Unlocked',
-  }
-}
+    changeAvailabilityResponse: 'Accepted',
+  },
+};
 
 export default defaultSettings

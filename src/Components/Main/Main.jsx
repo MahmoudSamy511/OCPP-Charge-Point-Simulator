@@ -299,6 +299,37 @@ const Main = () => {
           centralSystemSend(result.ocppCommand, result.lastCommand)
         }
         break;
+      case 'ChangeAvailability':
+        // Validate connectorId
+        if (connId === 0 || connId > settingsState.mainSettings.numberOfConnectors) {
+          const errorResponse = JSON.stringify([ 4, id, 'PropertyConstraintViolation', 'Invalid connectorId', {} ])
+          updateLog({ time: getTime(), type: logTypes.send, command: 'ChangeAvailability Error', message: errorResponse })
+          ws.send(errorResponse)
+          return
+        }
+
+        const { type } = payload
+        const changeAvailabilityStatus = settingsState.simulation.changeAvailabilityResponse
+        const changeAvailabilityResponse = JSON.stringify([ 3, id, { status: changeAvailabilityStatus }])
+        
+        updateLog({ time: getTime(), type: logTypes.send, command: 'ChangeAvailability Response', message: changeAvailabilityResponse })
+        ws.send(changeAvailabilityResponse)
+
+        // Send StatusNotification based on the response
+        if (changeAvailabilityStatus === 'Accepted' || changeAvailabilityStatus === 'Scheduled') {
+          // Determine the new status based on the type requested
+          const newStatus = type === 'Operative' ? connectorStatus.Available : connectorStatus.Unavailable
+          
+          // Change specific connector
+          if (!connectors[connId].inTransaction || changeAvailabilityStatus === 'Scheduled') {
+            connectors[connId].status = newStatus
+            updateConnector[connId]({ ...connectors[connId] })
+            
+            const statusData = sendCommand('StatusNotification', { connectorId: connId, status: newStatus })
+            centralSystemSend(statusData.ocppCommand, statusData.lastCommand)
+          }
+        }
+        break;
       default:
         break;
     }
