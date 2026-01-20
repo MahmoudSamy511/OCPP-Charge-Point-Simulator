@@ -92,7 +92,13 @@ const Main = () => {
     const getCommand = (commands.filter(x => x.id === id))[0]
 
     if (!getCommand) {
-      updateLog( { time: getTime(), type: logTypes.error, message: 'Cannot recognize command!' })
+      const commandName = message?.errorCode ? `Error: ${message.errorCode}` : 'Unknown'
+      updateLog({ 
+        time: getTime(), 
+        type: logTypes.error, 
+        command: commandName,
+        message: JSON.stringify(message) 
+      })
       return
     }
 
@@ -153,7 +159,7 @@ const Main = () => {
       centralSystemSend(statusData.ocppCommand, statusData.lastCommand)
     }
 
-    if (command === 'StopTransaction' && message.idTagInfo.status === 'Accepted') {
+    if (command === 'StopTransaction' && (!message.idTagInfo || message.idTagInfo.status === 'Accepted')) {
       connectors[connector].startMeterValue = connectors[connector].currentMeterValue
       connectors[connector].transactionId = 0
       connectors[connector].inTransaction = false
@@ -177,10 +183,12 @@ const Main = () => {
     switch (request) {
       case 'RemoteStartTransaction':
         if (connectors[connId].inTransaction) {
+          updateLog({ time: getTime(), type: logTypes.send, command: 'RemoteStartTransaction Response', message: rejectRespond })
           ws.send(rejectRespond)
           return
         }
 
+        updateLog({ time: getTime(), type: logTypes.send, command: 'RemoteStartTransaction Response', message: acceptRespond })
         ws.send(acceptRespond)
         connectors[connId].idTag = payload.idTag
         updateConnector[connId]({ ...connectors[connId] })
@@ -198,10 +206,12 @@ const Main = () => {
           }
 
         if (!connId) {
+          updateLog({ time: getTime(), type: logTypes.send, command: 'RemoteStopTransaction Response', message: rejectRespond })
           ws.send(rejectRespond)
           return
         }
 
+        updateLog({ time: getTime(), type: logTypes.send, command: 'RemoteStopTransaction Response', message: acceptRespond })
         ws.send(acceptRespond)
         metaData.connectorId = connId
         metaData.currentMeterValue = connectors[connId].currentMeterValue
@@ -213,10 +223,12 @@ const Main = () => {
       case 'TriggerMessage':
         const { requestedMessage } = payload
         if (!connectors[connId].inTransaction && requestedMessage === 'MeterValues') {
+          updateLog({ time: getTime(), type: logTypes.send, command: 'TriggerMessage Response', message: rejectRespond })
           ws.send(rejectRespond)
           return
         }
 
+        updateLog({ time: getTime(), type: logTypes.send, command: 'TriggerMessage Response', message: acceptRespond })
         ws.send(acceptRespond)
         metaData.connectorId = connId
         metaData.transactionId = connectors[connId].transactionId
@@ -231,35 +243,52 @@ const Main = () => {
       case 'UnlockConnector':
         const getSetting = settingsState.stationSettings.findIndex(x => x.key === 'UnlockConnectorOnEVSideDisconnect')
         if (getSetting === -1 || settingsState.stationSettings[getSetting].value === false) {
-          ws.send(JSON.stringify([ 3, id, { status: 'NotSupported' }]))
+          const notSupportedResponse = JSON.stringify([ 3, id, { status: 'NotSupported' }])
+          updateLog({ time: getTime(), type: logTypes.send, command: 'UnlockConnector Response', message: notSupportedResponse })
+          ws.send(notSupportedResponse)
           return
         }
 
-        ws.send(JSON.stringify([ 3, id, { status: connId === 1 ? settingsState.simulation.connectorOneUnlock : settingsState.simulation.connectorTwoUnlock }]))
+        const unlockResponse = JSON.stringify([ 3, id, { status: connId === 1 ? settingsState.simulation.connectorOneUnlock : settingsState.simulation.connectorTwoUnlock }])
+        updateLog({ time: getTime(), type: logTypes.send, command: 'UnlockConnector Response', message: unlockResponse })
+        ws.send(unlockResponse)
         break;
       case 'GetConfiguration':
         const returnConfiguration = { configurationKey: settingsState.stationSettings, unknownKey: [] }
-        ws.send(JSON.stringify([ 3, id, returnConfiguration]))
+        const configResponse = JSON.stringify([ 3, id, returnConfiguration])
+        updateLog({ time: getTime(), type: logTypes.send, command: 'GetConfiguration Response', message: configResponse })
+        ws.send(configResponse)
         break;
       case 'ChangeConfiguration':
         const { key, value } = payload
         let changeValueStatus = 'Accepted'
         const findSetting = settingsState.stationSettings.findIndex(x => x.key === key)
-        if (findSetting === -1) changeValueStatus = 'NotSupported'
+        if (findSetting === -1) {
+          const notSupportedResponse = JSON.stringify([ 3, id, { status: 'NotSupported' }])
+          updateLog({ time: getTime(), type: logTypes.send, command: 'ChangeConfiguration Response', message: notSupportedResponse })
+          ws.send(notSupportedResponse)
+          return
+        }
 
         const checkSetting = settingsState.stationSettings[findSetting]
         if (checkSetting.readonly) changeValueStatus = 'Rejected'
         if ((checkSetting.value === 'true' || checkSetting.value === 'false') && value !== 'true' && value !== 'false') changeValueStatus = 'Rejected'
         if (!isNaN(checkSetting.value) && isNaN(value)) changeValueStatus = 'Rejected'
         
-        ws.send(JSON.stringify([ 3, id, { status: changeValueStatus }]))
+        const changeConfigResponse = JSON.stringify([ 3, id, { status: changeValueStatus }])
+        updateLog({ time: getTime(), type: logTypes.send, command: 'ChangeConfiguration Response', message: changeConfigResponse })
+        ws.send(changeConfigResponse)
 
-        const element = { ...checkSetting, value }
-        settingsState.stationSettings[findSetting] = element
-        setSettingsState( { ...settingsState } )
+        if (changeValueStatus === 'Accepted') {
+          const element = { ...checkSetting, value }
+          settingsState.stationSettings[findSetting] = element
+          setSettingsState( { ...settingsState } )
+        }
         break;
       case 'GetDiagnostics':
-        ws.send(JSON.stringify([ 3, id, { fileName: settingsState.simulation.diagnosticFileName }]))
+        const diagnosticsResponse = JSON.stringify([ 3, id, { fileName: settingsState.simulation.diagnosticFileName }])
+        updateLog({ time: getTime(), type: logTypes.send, command: 'GetDiagnostics Response', message: diagnosticsResponse })
+        ws.send(diagnosticsResponse)
         if (!uploading) {
           clearInterval(uploadInterval)
           setUploading(true)
@@ -305,16 +334,49 @@ const Main = () => {
     }
 
     ws.onmessage = (msg) => {
-      const [ type, id, message, payload ] = JSON.parse(msg.data)
-      switch (type) {
-        case 2:
-          incomingRequest(id, message, payload)
-          break;
-        case 3:
-          incomingMessage(id, message)
-          break;
-        default:
-          break;
+      try {
+        const parsed = JSON.parse(msg.data)
+        const type = parsed[0]
+        const id = parsed[1]
+        
+        switch (type) {
+          case 2:
+            incomingRequest(id, parsed[2], parsed[3])
+            break;
+          case 3:
+            incomingMessage(id, parsed[2])
+            break;
+          case 4:
+            const getCommand = (commands.filter(x => x.id === id))[0]
+            const commandName = getCommand ? getCommand.command : 'Unknown'
+            const errorMessage = {
+              errorCode: parsed[2] || 'Unknown',
+              errorDescription: parsed[3] || 'No description',
+              errorDetails: parsed[4] || null
+            }
+            updateLog({ 
+              time: getTime(), 
+              type: logTypes.error, 
+              command: commandName,
+              message: JSON.stringify(errorMessage) 
+            })
+            break;
+          default:
+            updateLog({ 
+              time: getTime(), 
+              type: logTypes.error, 
+              command: 'Unknown',
+              message: `Unexpected message type: ${type}. Raw: ${msg.data}` 
+            })
+            break;
+        }
+      } catch (error) {
+        updateLog({ 
+          time: getTime(), 
+          type: logTypes.error, 
+          command: 'Parse Error',
+          message: `Failed to parse message: ${error.message}. Raw: ${msg.data}` 
+        })
       }
     }
   }
@@ -396,6 +458,5 @@ const Main = () => {
     </Container>
   )
 }
-
 
 export default Main
