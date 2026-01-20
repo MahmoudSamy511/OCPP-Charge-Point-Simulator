@@ -126,34 +126,77 @@ const Simulation = () => {
                   </FormControl>
                 : null
             }
+            <FormControl fullWidth>
+              <InputLabel>Change Availability Response</InputLabel>
+              <Select
+                size="small"
+                value={settingsState.simulation.changeAvailabilityResponse}
+                label="Change Availability Response"
+                name="changeAvailabilityResponse"
+                onChange={(e) =>
+                  changeValueAndInfo(e.target.name, e.target.value)
+                }
+                onMouseDown={() =>
+                  setHelpText({
+                    description:
+                      simulateInfo.changeAvailabilityResponse.description,
+                    valueDescription:
+                      simulateInfo.changeAvailabilityResponse.valueDescription[
+                        settingsState.simulation.changeAvailabilityResponse
+                      ],
+                    value: "changeAvailabilityResponse",
+                  })
+                }
+              >
+                <MenuItem value={"Accepted"}>Accepted</MenuItem>
+                <MenuItem value={"Rejected"}>Rejected</MenuItem>
+                <MenuItem value={"Scheduled"}>Scheduled</MenuItem>
+              </Select>
+            </FormControl>
           </Stack>
         </Grid>
         <Grid item xs={6}>
-          {
-            helpText === null
-            ? null
-            : <Paper sx={{p: 2}}>
-                <Box display='flex' alignItems='center' justifyContent='space-between'>
-                  <Typography fontWeight='bold' color='primary'>{helpText.value}</Typography>
-                  <HelpIcon color='primary' />
+          {helpText === null ? null : (
+            <Paper sx={{ p: 2 }}>
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <Typography fontWeight="bold" color="primary">
+                  {helpText.value}
+                </Typography>
+                <HelpIcon color="primary" />
+              </Box>
+              <Divider sx={{ mt: 0.5, mb: 1.5 }} />
+              <Stack direction="row" spacing={2} sx={{ pb: 1 }}>
+                <Box sx={{ minWidth: 80 }}>
+                  <Typography color="primary">Field desc:</Typography>
                 </Box>
-                <Divider sx={{ mt: 0.5, mb: 1.5 }} />
-                <Stack direction='row' spacing={2} sx={{pb: 1}} >
-                  <Box sx={{ minWidth: 80 }}><Typography color='primary'>Field desc:</Typography></Box>
-                  <Box>{ helpText.description }</Box>
-                </Stack>
-                <Stack direction='row' spacing={2} >
-                  {
-                    helpText.valueDescription
-                      ? <><Box sx={{ minWidth: 80 }}><Typography color='primary'>Value desc:</Typography></Box><Box>{ helpText.valueDescription }</Box></>
-                      : null
-                  }
-                </Stack>
-              </Paper>
-          }
+                <Box>{helpText.description}</Box>
+              </Stack>
+              <Stack direction="row" spacing={2}>
+                {helpText.valueDescription ? (
+                  <>
+                    <Box sx={{ minWidth: 80 }}>
+                      <Typography color="primary">Value desc:</Typography>
+                    </Box>
+                    <Box>{helpText.valueDescription}</Box>
+                  </>
+                ) : null}
+              </Stack>
+            </Paper>
+          )}
         </Grid>
       </Grid>
-      <Button sx={{mt: 3}} startIcon={<SaveIcon />} variant='contained' onClick={() => saveSettings(settingsState)}>Save</Button>
+      <Button
+        sx={{ mt: 3 }}
+        startIcon={<SaveIcon />}
+        variant="contained"
+        onClick={() => saveSettings(settingsState)}
+      >
+        Save
+      </Button>
     </Box>
   )
 }
